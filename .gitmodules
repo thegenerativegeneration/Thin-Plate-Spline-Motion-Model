@@ -1,0 +1,3 @@
+[submodule "video-preprocessing"]
+	path = video-preprocessing
+	url = https://github.com/AliaksandrSiarohin/video-preprocessing.git
