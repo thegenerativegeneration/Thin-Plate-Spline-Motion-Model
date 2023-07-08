@@ -56,6 +56,10 @@ train_params:
     equivariance_value: 10
     warp_loss: 10
     bg: 10
+  optimizer: 'adam'
+  optimizer_params:
+    betas: [ 0.5, 0.999 ]
+    weight_decay: 1e-4
 
 train_avd_params:
   num_epochs: 100

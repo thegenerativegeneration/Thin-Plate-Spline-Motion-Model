@@ -17,12 +17,13 @@ class Logger:
     def __init__(self, log_dir, checkpoint_freq=50, visualizer_params=None,
                  zfill_num=8, log_file_name='log.txt', models=()):
 
-        self.models = None
+        self.models = models
         self.loss_list = []
         self.cpk_dir = log_dir
         self.visualizations_dir = os.path.join(log_dir, 'train-vis')
         if not os.path.exists(self.visualizations_dir):
             os.makedirs(self.visualizations_dir)
+        print("Visualizations will be saved in %s" % self.visualizations_dir)
         self.log_file = open(os.path.join(log_dir, log_file_name), 'a')
         self.zfill_num = zfill_num
         self.visualizer = Visualizer(**visualizer_params)
@@ -46,9 +47,10 @@ class Logger:
 
     def visualize_rec(self, inp, out):
         image = self.visualizer.visualize(inp['driving'], inp['source'], out)
+        wandb.log({"image": [wandb.Image(image)]})
         imageio.imsave(os.path.join(self.visualizations_dir, "%s-rec.png" % str(self.epoch).zfill(self.zfill_num)),
                        image)
-        wandb.log({"image": [wandb.Image(image)]})
+
 
     def save_cpk(self, emergent=False):
         cpk = {k: v.state_dict() for k, v in self.models.items()}

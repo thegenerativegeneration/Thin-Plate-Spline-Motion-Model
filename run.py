@@ -18,6 +18,7 @@ from train import train
 from train_avd import train_avd
 from reconstruction import reconstruction
 import os
+from torchinfo import summary
 import bitsandbytes as bnb
 
 optimizer_choices = {
@@ -37,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument("--mode", default="train", choices=["train", "reconstruction", "train_avd"])
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
-    parser.add_argument("--optimizer_class", default="adam", choices=optimizer_choices.keys())
+    parser.add_argument("--detect_anomaly", action="store_true", help="detect anomaly in autograd")
 
 
     opt = parser.parse_args()
@@ -49,6 +50,9 @@ if __name__ == "__main__":
     else:
         log_dir = os.path.join(opt.log_dir, os.path.basename(opt.config).split('.')[0])
         log_dir += ' ' + strftime("%d_%m_%y_%H.%M.%S", gmtime())
+
+    if opt.detect_anomaly:
+        torch.autograd.set_detect_anomaly(True)
 
     inpainting = InpaintingNetwork(**config['model_params']['generator_params'],
                                         **config['model_params']['common_params'])
@@ -76,7 +80,17 @@ if __name__ == "__main__":
     if not os.path.exists(os.path.join(log_dir, os.path.basename(opt.config))):
         copy(opt.config, log_dir)
 
-    optimizer_class = optimizer_choices[opt.optimizer_class]
+    optimizer_class = optimizer_choices[config['train_params']['optimizer']]
+
+    print("Inpainting Network:")
+    summary(inpainting)
+    print("Keypoint Detector:")
+    summary(kp_detector)
+    print("Dense Motion Network:")
+    summary(dense_motion_network)
+    if bg_predictor is not None:
+        print("Background Predictor:")
+        summary(bg_predictor)
 
     if opt.mode == 'train':
         print("Training...")
@@ -90,3 +104,4 @@ if __name__ == "__main__":
         print("Reconstruction...")
         #TODO: update to accelerate
         reconstruction(config, inpainting, kp_detector, bg_predictor, dense_motion_network, opt.checkpoint, log_dir, dataset)
+

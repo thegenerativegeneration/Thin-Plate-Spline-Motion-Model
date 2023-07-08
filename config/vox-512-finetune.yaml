@@ -1,7 +1,7 @@
 # Use this file to finetune from a pretrained 256x256 model
 dataset_params:
-  root_dir: vox
-  frame_shape: null
+  root_dir: ./video-preprocessing/vox2-768
+  frame_shape: 512,512,3
   id_sampling: True
   augmentation_params:
     flip_param:
@@ -35,20 +35,20 @@ model_params:
 
 
 train_params:
-  num_epochs: 100
-  num_repeats: 10
-  epoch_milestones: [70, 90]
+  num_epochs: 30
+  num_repeats: 4
+  epoch_milestones: [20]
   # Higher LR seems to bring problems when finetuning
   lr_generator: 2.0e-5
   batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]
   dataloader_workers: 6
-  checkpoint_freq: 2
-  dropout_epoch: 0
+  checkpoint_freq: 5
+  dropout_epoch: 2
   dropout_maxp: 0.3
   dropout_startp: 0.1
-  dropout_inc_epoch: 10
-  bg_start: 0
+  dropout_inc_epoch: 1
+  bg_start: 5
   transform_params:
     sigma_affine: 0.05
     sigma_tps: 0.005
@@ -58,13 +58,17 @@ train_params:
     equivariance_value: 10
     warp_loss: 10
     bg: 10
+  optimizer: 'adamw'
+  optimizer_params:
+    betas: [0.9, 0.999]
+    weight_decay: 0.1
 
 train_avd_params:
   num_epochs: 200
   num_repeats: 1
   batch_size: 4
   dataloader_workers: 6
-  checkpoint_freq: 2
+  checkpoint_freq: 10
   epoch_milestones: [10, 20]
   lr: 1.0e-3
   lambda_shift: 1

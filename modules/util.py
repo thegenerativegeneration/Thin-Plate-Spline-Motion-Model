@@ -150,10 +150,10 @@ class ResBlock2d(nn.Module):
 
     def forward(self, x):
         out = self.norm1(x)
-        out = F.relu(out)
+        out = F.mish(out)
         out = self.conv1(out)
         out = self.norm2(out)
-        out = F.relu(out)
+        out = F.mish(out)
         out = self.conv2(out)
         out += x
         return out
@@ -172,10 +172,10 @@ class UpBlock2d(nn.Module):
         self.norm = nn.InstanceNorm2d(out_features, affine=True)
 
     def forward(self, x):
-        out = F.interpolate(x, scale_factor=2)
+        out = F.interpolate(x, scale_factor=2, mode='nearest')
         out = self.conv(out)
         out = self.norm(out)
-        out = F.relu(out)
+        out = F.mish(out)
         return out
 
 
@@ -194,7 +194,7 @@ class DownBlock2d(nn.Module):
     def forward(self, x):
         out = self.conv(x)
         out = self.norm(out)
-        out = F.relu(out)
+        out = F.mish(out)
         out = self.pool(out)
         return out
 
@@ -213,7 +213,7 @@ class SameBlock2d(nn.Module):
     def forward(self, x):
         out = self.conv(x)
         out = self.norm(out)
-        out = F.relu(out)
+        out = F.mish(out)
         return out
 
 
