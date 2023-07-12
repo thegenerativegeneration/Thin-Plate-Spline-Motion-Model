@@ -16,7 +16,7 @@ class KPDetector(nn.Module):
         num_features = self.fg_encoder.fc.in_features
         self.fg_encoder.fc = nn.Linear(num_features, num_tps*5*2)
         self.preprocess = torchvision.transforms.Compose([
-            torchvision.transforms.Resize((256, 256)),
+            torchvision.transforms.Resize((256, 256), antialias=True),
         ])
 
         

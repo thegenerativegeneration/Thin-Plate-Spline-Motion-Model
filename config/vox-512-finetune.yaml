@@ -35,20 +35,21 @@ model_params:
 
 
 train_params:
-  num_epochs: 30
+  num_epochs: 40
   num_repeats: 4
-  epoch_milestones: [20]
   # Higher LR seems to bring problems when finetuning
-  lr_generator: 2.0e-5
+  lr_generator: 2.0e-4
   batch_size: 4
-  scales: [1, 0.5, 0.25, 0.125]
+  scales: [1, 0.5, 0.25, 0.125, 0.0625]
   dataloader_workers: 6
   checkpoint_freq: 5
   dropout_epoch: 2
   dropout_maxp: 0.3
   dropout_startp: 0.1
   dropout_inc_epoch: 1
-  bg_start: 5
+  bg_start: 41
+  freeze_kp_detector: True
+  freeze_bg_predictor: True
   transform_params:
     sigma_affine: 0.05
     sigma_tps: 0.005

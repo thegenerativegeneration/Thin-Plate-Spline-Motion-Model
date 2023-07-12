@@ -12,7 +12,7 @@ class BGMotionPredictor(nn.Module):
         super(BGMotionPredictor, self).__init__()
         self.bg_encoder = models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
         self.preprocess = torchvision.transforms.Compose([
-            torchvision.transforms.Resize((256, 256)),
+            torchvision.transforms.Resize((256, 256), antialias=True),
             ])
         self.bg_encoder.conv1 = nn.Conv2d(6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         num_features = self.bg_encoder.fc.in_features

@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
 
     bg_predictor = None
-    if (config['model_params']['common_params']['bg']):
+    if 'bg_predictor' in checkpoint:
         bg_predictor = BGMotionPredictor()
 
     avd_network = None

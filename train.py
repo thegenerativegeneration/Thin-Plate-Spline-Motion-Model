@@ -15,6 +15,7 @@ torch.backends.cudnn.benchmark = True
 
 accelerator = Accelerator()
 
+
 def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_network, checkpoint, log_dir, dataset,
           optimizer_class=torch.optim.Adam
           ):
@@ -44,8 +45,18 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
     else:
         start_epoch = 0
 
-
-
+    freeze_kp_detector = train_params.get('freeze_kp_detector', False)
+    freeze_bg_predictor = train_params.get('freeze_bg_predictor', False)
+    if freeze_kp_detector:
+        print('freeze kp detector')
+        kp_detector.eval()
+        for param in kp_detector.parameters():
+            param.requires_grad = False
+    if freeze_bg_predictor:
+        print('freeze bg predictor')
+        bg_predictor.eval()
+        for param in bg_predictor.parameters():
+            param.requires_grad = False
 
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
@@ -53,14 +64,16 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
                             num_workers=train_params['dataloader_workers'], drop_last=True)
 
     scheduler_optimizer = OneCycleLR(optimizer, max_lr=train_params['lr_generator'],
-                                     total_steps=(len(dataset) // train_params['batch_size']) * train_params['num_epochs'],
-                                      last_epoch=start_epoch-1)
+                                     total_steps=(len(dataset) // train_params['batch_size']) * train_params[
+                                         'num_epochs'],
+                                     last_epoch=start_epoch - 1)
 
     scheduler_bg_predictor = None
     if bg_predictor:
         scheduler_bg_predictor = OneCycleLR(optimizer_bg_predictor, max_lr=train_params['lr_generator'],
-                                     total_steps=(len(dataset) // train_params['batch_size']) * train_params['num_epochs'],
-                                      last_epoch=start_epoch-1)
+                                            total_steps=(len(dataset) // train_params['batch_size']) * train_params[
+                                                'num_epochs'],
+                                            last_epoch=start_epoch - 1)
         bg_predictor, optimizer_bg_predictor = accelerator.prepare(bg_predictor, optimizer_bg_predictor)
 
     generator_full = GeneratorFullModel(kp_detector, bg_predictor, dense_motion_network, inpainting_network,
@@ -75,16 +88,21 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
     if train_params.get('visualize_model', False):
         # visualize graph
         sample = next(iter(dataloader))
-        draw_graph(generator_full, input_data=[sample, 100], save_graph=True, directory=log_dir, graph_name='generator_full')
-        draw_graph(kp_detector, input_data=[sample['driving']], save_graph=True, directory=log_dir, graph_name='kp_detector')
+        draw_graph(generator_full, input_data=[sample, 100], save_graph=True, directory=log_dir,
+                   graph_name='generator_full')
+        draw_graph(kp_detector, input_data=[sample['driving']], save_graph=True, directory=log_dir,
+                   graph_name='kp_detector')
         kp_driving = kp_detector(sample['driving'])
         kp_source = kp_detector(sample['source'])
         bg_param = bg_predictor(sample['source'], sample['driving'])
-        dense_motion_param = {'source_image': sample['source'], 'kp_driving':  kp_driving, 'kp_source': kp_source, 'bg_param': bg_param,
-                                                      'dropout_flag' : False, 'dropout_p' : 0.0}
+        dense_motion_param = {'source_image': sample['source'], 'kp_driving': kp_driving, 'kp_source': kp_source,
+                              'bg_param': bg_param,
+                              'dropout_flag': False, 'dropout_p': 0.0}
         dense_motion = dense_motion_network(**dense_motion_param)
-        draw_graph(dense_motion_network, input_data=dense_motion_param, save_graph=True, directory=log_dir, graph_name='dense_motion_network')
-        draw_graph(inpainting_network, input_data=[sample['source'], dense_motion], save_graph=True, directory=log_dir, graph_name='inpainting_network')
+        draw_graph(dense_motion_network, input_data=dense_motion_param, save_graph=True, directory=log_dir,
+                   graph_name='dense_motion_network')
+        draw_graph(inpainting_network, input_data=[sample['source'], dense_motion], save_graph=True, directory=log_dir,
+                   graph_name='inpainting_network')
 
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'],
                 checkpoint_freq=train_params['checkpoint_freq'],
@@ -100,14 +118,18 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
 
                 clip_grad_norm_(kp_detector.parameters(), max_norm=10, norm_type=math.inf)
                 clip_grad_norm_(dense_motion_network.parameters(), max_norm=10, norm_type=math.inf)
-                if bg_predictor and epoch >= bg_start:
+                if bg_predictor and epoch >= bg_start and not freeze_bg_predictor:
                     clip_grad_norm_(bg_predictor.parameters(), max_norm=10, norm_type=math.inf)
 
                 optimizer.step()
-                optimizer.zero_grad()
-                if bg_predictor and epoch >= bg_start:
+
+                if bg_predictor and epoch >= bg_start and not freeze_bg_predictor:
                     optimizer_bg_predictor.step()
                     optimizer_bg_predictor.zero_grad()
+                    scheduler_bg_predictor.step()
+
+                optimizer.zero_grad()
+                scheduler_optimizer.step()
 
                 losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
                 lrs = {
@@ -116,23 +138,15 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
                 }
                 logger.log_iter(losses=losses, others=lrs)
 
-                scheduler_optimizer.step()
-                if bg_predictor:
-                    scheduler_bg_predictor.step()
+
 
             model_save = {
-                'inpainting_network': inpainting_network,
-                'dense_motion_network': dense_motion_network,
-                'kp_detector': kp_detector,
+                'inpainting_network': accelerator.unwrap_model(inpainting_network),
+                'dense_motion_network': accelerator.unwrap_model(dense_motion_network),
+                'kp_detector': accelerator.unwrap_model(kp_detector),
                 'optimizer': optimizer,
+                'bg_predictor': accelerator.unwrap_model(bg_predictor) if bg_predictor else None,
+                'optimizer_bg_predictor': optimizer_bg_predictor
             }
-            if bg_predictor and epoch >= bg_start:
-                model_save['bg_predictor'] = bg_predictor
-                model_save['optimizer_bg_predictor'] = optimizer_bg_predictor
-
-            accelerator.save_state(log_dir)
-
 
             logger.log_epoch(epoch, model_save, inp=x, out=generated)
-
-
