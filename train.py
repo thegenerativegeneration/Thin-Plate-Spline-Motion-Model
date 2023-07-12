@@ -66,14 +66,16 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
     scheduler_optimizer = OneCycleLR(optimizer, max_lr=train_params['lr_generator'],
                                      total_steps=(len(dataset) // train_params['batch_size']) * train_params[
                                          'num_epochs'],
-                                     last_epoch=start_epoch - 1)
+                                     last_epoch=(len(dataset) // train_params['batch_size']) * (start_epoch - 1)
+                                     )
 
     scheduler_bg_predictor = None
     if bg_predictor:
         scheduler_bg_predictor = OneCycleLR(optimizer_bg_predictor, max_lr=train_params['lr_generator'],
                                             total_steps=(len(dataset) // train_params['batch_size']) * train_params[
                                                 'num_epochs'],
-                                            last_epoch=start_epoch - 1)
+                                            last_epoch=(len(dataset) // train_params['batch_size']) * (start_epoch - 1)
+                                            )
         bg_predictor, optimizer_bg_predictor = accelerator.prepare(bg_predictor, optimizer_bg_predictor)
 
     generator_full = GeneratorFullModel(kp_detector, bg_predictor, dense_motion_network, inpainting_network,
