@@ -63,10 +63,13 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
     dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True,
                             num_workers=train_params['dataloader_workers'], drop_last=True)
 
+    last_epoch = (len(dataset) // train_params['batch_size']) * (start_epoch - 1)
+    last_epoch = max(last_epoch, -1)
+
     scheduler_optimizer = OneCycleLR(optimizer, max_lr=train_params['lr_generator'],
                                      total_steps=(len(dataset) // train_params['batch_size']) * train_params[
                                          'num_epochs'],
-                                     last_epoch=(len(dataset) // train_params['batch_size']) * (start_epoch - 1)
+                                     last_epoch=last_epoch
                                      )
 
     scheduler_bg_predictor = None
@@ -74,7 +77,7 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
         scheduler_bg_predictor = OneCycleLR(optimizer_bg_predictor, max_lr=train_params['lr_generator'],
                                             total_steps=(len(dataset) // train_params['batch_size']) * train_params[
                                                 'num_epochs'],
-                                            last_epoch=(len(dataset) // train_params['batch_size']) * (start_epoch - 1)
+                                            last_epoch=last_epoch
                                             )
         bg_predictor, optimizer_bg_predictor = accelerator.prepare(bg_predictor, optimizer_bg_predictor)
 
@@ -148,7 +151,7 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
                 'kp_detector': accelerator.unwrap_model(kp_detector),
                 'optimizer': optimizer,
                 'bg_predictor': accelerator.unwrap_model(bg_predictor) if bg_predictor else None,
-                'optimizer_bg_predictor': optimizer_bg_predictor
+                'optimizer_bg_predictor': optimizer_bg_predictor,
             }
 
             logger.log_epoch(epoch, model_save, inp=x, out=generated)

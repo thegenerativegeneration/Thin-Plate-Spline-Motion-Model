@@ -169,6 +169,7 @@ class UpBlock2d(nn.Module):
 
         self.conv = nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
                               padding=padding, groups=groups)
+
         self.norm = nn.InstanceNorm2d(out_features, affine=True)
 
     def forward(self, x):
@@ -189,7 +190,7 @@ class DownBlock2d(nn.Module):
         self.conv = nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
                               padding=padding, groups=groups)
         self.norm = nn.InstanceNorm2d(out_features, affine=True)
-        self.pool = nn.AvgPool2d(kernel_size=(2, 2))
+        self.pool = nn.MaxPool2d(kernel_size=(2, 2))
 
     def forward(self, x):
         out = self.conv(x)

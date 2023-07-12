@@ -29,6 +29,7 @@ class DenseMotionNetwork(nn.Module):
         if multi_mask:
             up = []
             self.up_nums = int(math.log(1/scale_factor, 2))
+            #self.occlusion_num = 5 # usually 4, needs to be increased if layers in inpainting network are added
             self.occlusion_num = 4
             
             channel = [hourglass_output_size[-1]//(2**i) for i in range(self.up_nums)]
@@ -159,6 +160,7 @@ class DenseMotionNetwork(nn.Module):
                 occlusion_map.append(torch.sigmoid(self.occlusion[i+self.occlusion_num-self.up_nums](prediction)))
         else:
             occlusion_map.append(torch.sigmoid(self.occlusion[0](prediction[-1])))
+
                 
         out_dict['occlusion_map'] = occlusion_map # Multi-resolution Occlusion Masks
         return out_dict

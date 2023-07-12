@@ -49,6 +49,7 @@ class InpaintingNetwork(nn.Module):
         if not self.multi_mask:
             if inp.shape[2] != occlusion_map.shape[2] or inp.shape[3] != occlusion_map.shape[3]:
                 occlusion_map = F.interpolate(occlusion_map, size=inp.shape[2:], mode='bilinear',align_corners=True)
+
         out = inp * occlusion_map
         return out
 
@@ -76,13 +77,14 @@ class InpaintingNetwork(nn.Module):
         warped_encoder_maps = []
         warped_encoder_maps.append(out_ij)
 
+
         for i in range(self.num_down_blocks):
+
+            out = self.resblock[2*i](out) # e.g. 0, 2, 4, 6
+            out = self.resblock[2*i+1](out) # e.g. 1, 3, 5, 7
+            out = self.up_blocks[i](out) # e.g. 0, 1, 2, 3
             
-            out = self.resblock[2*i](out)
-            out = self.resblock[2*i+1](out)
-            out = self.up_blocks[i](out)
-            
-            encode_i = encoder_map[-(i+2)]
+            encode_i = encoder_map[-(i+2)] # e.g. -2, -3, -4, -5
             encode_ij = self.deform_input(encode_i.detach(), deformation)
             encode_i = self.deform_input(encode_i, deformation)
             
@@ -120,7 +122,8 @@ class InpaintingNetwork(nn.Module):
         encoder_map.append(self.occlude_input(out.detach(), occlusion_map[-1].detach()))
         for i in range(len(self.down_blocks)):
             out = self.down_blocks[i](out.detach())
-            out_mask = self.occlude_input(out.detach(), occlusion_map[2-i].detach())
+            #out_mask = self.occlude_input(out.detach(), occlusion_map[3-i].detach()) # is usually 2-i, must increase per block
+            out_mask = self.occlude_input(out.detach(), occlusion_map[-2-i].detach())
             encoder_map.append(out_mask.detach())
 
         return encoder_map
