@@ -62,7 +62,7 @@ class Logger:
     @staticmethod
     def load_cpk(checkpoint_path, inpainting_network=None, dense_motion_network=None, kp_detector=None,
                  bg_predictor=None, avd_network=None, optimizer=None, optimizer_bg_predictor=None,
-                 optimizer_avd=None):
+                 optimizer_avd=None, discriminator=None, discriminator_optimizer=None):
         checkpoint = torch.load(checkpoint_path)
         if inpainting_network is not None:
             inpainting_network.load_state_dict(checkpoint['inpainting_network'])
@@ -82,6 +82,11 @@ class Logger:
         if optimizer_avd is not None:
             if 'optimizer_avd' in checkpoint:
                 optimizer_avd.load_state_dict(checkpoint['optimizer_avd'])
+        if discriminator is not None and 'discriminator' in checkpoint:
+            discriminator.load_state_dict(checkpoint['discriminator'])
+        if discriminator_optimizer is not None and 'optimizer_discriminator' in checkpoint:
+            discriminator_optimizer.load_state_dict(checkpoint['optimizer_discriminator'])
+
         epoch = -1
         if 'epoch' in checkpoint:
             epoch = checkpoint['epoch']
