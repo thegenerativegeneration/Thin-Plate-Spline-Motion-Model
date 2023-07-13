@@ -12,7 +12,8 @@ class DenseMotionNetwork(nn.Module):
     """
 
     def __init__(self, block_expansion, num_blocks, max_features, num_tps, num_channels, 
-                 scale_factor=0.25, bg = False, multi_mask = True, kp_variance=0.01):
+                 scale_factor=0.25, bg = False, multi_mask = True, kp_variance=0.01,
+                 occlusion_num = 4, **kwargs):
         super(DenseMotionNetwork, self).__init__()
 
         if scale_factor != 1:
@@ -30,7 +31,7 @@ class DenseMotionNetwork(nn.Module):
             up = []
             self.up_nums = int(math.log(1/scale_factor, 2))
             #self.occlusion_num = 5 # usually 4, needs to be increased if layers in inpainting network are added
-            self.occlusion_num = 4
+            self.occlusion_num = occlusion_num
             
             channel = [hourglass_output_size[-1]//(2**i) for i in range(self.up_nums)]
             for i in range(self.up_nums):

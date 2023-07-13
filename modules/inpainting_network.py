@@ -120,10 +120,13 @@ class InpaintingNetwork(nn.Module):
         out = self.first(driver_image)
         encoder_map = []
         encoder_map.append(self.occlude_input(out.detach(), occlusion_map[-1].detach()))
-        for i in range(len(self.down_blocks)):
+        n_blocks = len(self.down_blocks)
+        for i in range(n_blocks):
             out = self.down_blocks[i](out.detach())
             #out_mask = self.occlude_input(out.detach(), occlusion_map[3-i].detach()) # is usually 2-i, must increase per block
-            out_mask = self.occlude_input(out.detach(), occlusion_map[-2-i].detach())
+            #out_mask = self.occlude_input(out.detach(), occlusion_map[2-i].detach())
+            k = n_blocks - i - 1
+            out_mask = self.occlude_input(out.detach(), occlusion_map[k].detach())
             encoder_map.append(out_mask.detach())
 
         return encoder_map
