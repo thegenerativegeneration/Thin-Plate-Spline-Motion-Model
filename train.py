@@ -141,72 +141,80 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
                    graph_name='dense_motion_network')
         draw_graph(inpainting_network, input_data=[sample['source'], dense_motion], save_graph=True, directory=log_dir,
                    graph_name='inpainting_network')
-
+    model_list = [inpainting_network, dense_motion_network, discriminator]
+    if bg_predictor:
+        model_list.append(bg_predictor)
+    if not freeze_kp_detector:
+        model_list.append(kp_detector)
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'],
                 checkpoint_freq=train_params['checkpoint_freq'],
-                models=[inpainting_network, dense_motion_network, kp_detector]
+                models=model_list,
                 ) as logger:
         for epoch in trange(start_epoch, train_params['num_epochs']):
             i = 0
             for x in tqdm(dataloader):
-                losses_generator, generated = generator_full(x, epoch)
-                disc_loss = torch.zeros(1, device=x['driving'].device)
-                gen_loss = torch.zeros(1, device=x['driving'].device)
+                with (accelerator.accumulate(generator_full), accelerator.accumulate(discriminator),
+                      accelerator.accumulate(inpainting_network), accelerator.accumulate(dense_motion_network),
+                      accelerator.accumulate(kp_detector), accelerator.accumulate(bg_predictor)):
+                    losses_generator, generated = generator_full(x, epoch)
+                    disc_loss = torch.zeros(1, device=x['driving'].device)
+                    gen_loss = torch.zeros(1, device=x['driving'].device)
 
-                if i % 2 == 0:
-                    disc_pred_fake = discriminator(generated['prediction'])
-                    disc_pred_real = discriminator(x['driving'])
-                    for j in range(len(disc_pred_real)):  # number of scales
-                        disc_loss += discriminator_adversarial_loss(disc_pred_real[j], disc_pred_fake[j])
-                else:
-                    features_fake, fake_preds = discriminator.forward_with_features(generated['prediction'])
-                    features_real, _ = discriminator.forward_with_features(x['driving'])
-                    for k in range(len(fake_preds)):
-                        gen_loss += generator_adversarial_loss(fake_preds[k])
+                    if i % 2 == 0:
+                        disc_pred_fake = discriminator(generated['prediction'])
+                        disc_pred_real = discriminator(x['driving'])
+                        for j in range(len(disc_pred_real)):  # number of scales
+                            disc_loss += discriminator_adversarial_loss(disc_pred_real[j], disc_pred_fake[j])
+                    else:
+                        features_fake, fake_preds = discriminator.forward_with_features(generated['prediction'])
+                        features_real, _ = discriminator.forward_with_features(x['driving'])
+                        for k in range(len(fake_preds)):
+                            gen_loss += generator_adversarial_loss(fake_preds[k])
 
-                losses_generator['gen'] = gen_loss
+                    losses_generator['gen'] = gen_loss
 
-                loss_values = [val.mean() for val in losses_generator.values()]
-                loss = sum(loss_values)
-
-
-
-                if i % 2 == 0:
-                    accelerator.backward(disc_loss, retain_graph=True)
-
-                    clip_grad_norm_(discriminator.parameters(), max_norm=10, norm_type=math.inf)
-                    optimizer_discriminator.step()
-                    optimizer_discriminator.zero_grad()
-
-                accelerator.backward(loss)
-
-                clip_grad_norm_(kp_detector.parameters(), max_norm=10, norm_type=math.inf)
-                clip_grad_norm_(dense_motion_network.parameters(), max_norm=10, norm_type=math.inf)
-                if bg_predictor and epoch >= bg_start and not freeze_bg_predictor:
-                    clip_grad_norm_(bg_predictor.parameters(), max_norm=10, norm_type=math.inf)
-
-                optimizer.step()
+                    loss_values = [val.mean() for val in losses_generator.values()]
+                    loss = sum(loss_values)
 
 
-                if bg_predictor and epoch >= bg_start and not freeze_bg_predictor:
-                    optimizer_bg_predictor.step()
-                    optimizer_bg_predictor.zero_grad()
-                    scheduler_bg_predictor.step()
 
-                optimizer.zero_grad()
-                scheduler_optimizer.step()
-                discriminator_scheduler.step()
+                    if i % 2 == 0:
+                        accelerator.backward(disc_loss, retain_graph=True)
 
-                losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
-                lrs = {
-                    'lr_generator': scheduler_optimizer.get_last_lr()[0],
-                    'lr_bg_predictor': scheduler_bg_predictor.get_last_lr()[0] if bg_predictor else 0,
-                    'lr_discriminator': discriminator_scheduler.get_last_lr()[0]
-                }
-                losses['disc'] = disc_loss.mean().detach().data.cpu().numpy()
-                logger.log_iter(losses=losses, others=lrs)
+                        clip_grad_norm_(discriminator.parameters(), max_norm=10, norm_type=math.inf)
+                        optimizer_discriminator.step()
+                        optimizer_discriminator.zero_grad()
 
-                i += 1
+                    accelerator.backward(loss)
+
+                    clip_grad_norm_(kp_detector.parameters(), max_norm=10, norm_type=math.inf)
+                    clip_grad_norm_(dense_motion_network.parameters(), max_norm=10, norm_type=math.inf)
+                    if bg_predictor and epoch >= bg_start and not freeze_bg_predictor:
+                        clip_grad_norm_(bg_predictor.parameters(), max_norm=10, norm_type=math.inf)
+
+                    optimizer.step()
+
+
+                    if bg_predictor and epoch >= bg_start and not freeze_bg_predictor:
+                        optimizer_bg_predictor.step()
+                        optimizer_bg_predictor.zero_grad()
+                        scheduler_bg_predictor.step()
+
+                    scheduler_optimizer.step()
+                    optimizer.zero_grad()
+
+                    discriminator_scheduler.step()
+
+                    losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
+                    lrs = {
+                        'lr_generator': scheduler_optimizer.get_last_lr()[0],
+                        'lr_bg_predictor': scheduler_bg_predictor.get_last_lr()[0] if bg_predictor else 0,
+                        'lr_discriminator': discriminator_scheduler.get_last_lr()[0]
+                    }
+                    losses['disc'] = disc_loss.mean().detach().data.cpu().numpy()
+                    logger.log_iter(losses=losses, others=lrs)
+
+                    i += 1
 
             model_save = {
                 'inpainting_network': accelerator.unwrap_model(inpainting_network),

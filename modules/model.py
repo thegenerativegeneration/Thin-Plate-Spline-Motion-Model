@@ -1,10 +1,15 @@
+import math
+import random
+
 import torchvision
+from facenet_pytorch.models.mtcnn import prewhiten
 from torch import nn
 import torch
 import torch.nn.functional as F
 from modules.util import AntiAliasInterpolation2d, TPS
 from torchvision import models
 import numpy as np
+from facenet_pytorch import MTCNN, InceptionResnetV1
 
 
 class Vgg19(torch.nn.Module):
@@ -77,7 +82,8 @@ class GeneratorFullModel(torch.nn.Module):
     Merge all generator related updates into single model for better multi-gpu usage
     """
 
-    def __init__(self, kp_extractor, bg_predictor, dense_motion_network, inpainting_network, train_params, *kwargs):
+    def __init__(self, kp_extractor, bg_predictor, dense_motion_network, inpainting_network, train_params,
+                 *kwargs):
         super(GeneratorFullModel, self).__init__()
         self.kp_extractor = kp_extractor
         self.inpainting_network = inpainting_network
@@ -106,6 +112,19 @@ class GeneratorFullModel(torch.nn.Module):
             if torch.cuda.is_available():
                 self.vgg = self.vgg.cuda()
 
+        if self.loss_weights.get('id', 0) > 0:
+            self.id_recognition_model = InceptionResnetV1(pretrained='vggface2').eval()
+            self.id_recognition_model.requires_grad_(False)
+            self.mtcnn = MTCNN()
+            self.mtcnn.requires_grad_(False)
+            if torch.cuda.is_available():
+                self.id_recognition_model = self.id_recognition_model.cuda()
+                self.mtcnn = self.mtcnn.cuda()
+
+        else:
+            self.id_recognition_model = None
+
+
 
     def forward(self, x, epoch):
         kp_source = self.kp_extractor(x['source'])
@@ -126,8 +145,10 @@ class GeneratorFullModel(torch.nn.Module):
         dense_motion = self.dense_motion_network(source_image=x['source'], kp_driving=kp_driving,
                                                     kp_source=kp_source, bg_param = bg_param, 
                                                     dropout_flag = dropout_flag, dropout_p = dropout_p)
+
         generated = self.inpainting_network(x['source'], dense_motion)
         generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
+
 
         loss_values = {}
 
@@ -179,5 +200,41 @@ class GeneratorFullModel(torch.nn.Module):
             eye = torch.eye(3).view(1, 1, 3, 3).type(value.type())
             value = torch.abs(eye - value).mean()
             loss_values['bg'] = self.loss_weights['bg'] * value
+
+        # l2 loss
+        if self.loss_weights['l2'] != 0:
+            loss_values['l2'] = torch.abs(generated['prediction'] - x['driving']).mean()
+            loss_values['l2'] = self.loss_weights['l2'] * loss_values['l2']
+
+        # huber loss
+        if self.loss_weights['huber'] != 0:
+            loss_values['huber'] = F.smooth_l1_loss(generated['prediction'], x['driving'])
+            loss_values['huber'] = self.loss_weights['huber'] * loss_values['huber']
+
+        # id loss
+        if self.id_recognition_model and self.loss_weights['id'] != 0:
+            try:
+                driving_preprocessed = x['driving'] * 255
+                driving_preprocessed = driving_preprocessed.permute(0, 2, 3, 1)
+                driving_preprocessed = driving_preprocessed.to(torch.float16)
+                driving_preprocessed = self.mtcnn(driving_preprocessed)
+                generated_preprocessed = generated['prediction'] * 255
+                generated_preprocessed = generated_preprocessed.permute(0, 2, 3, 1)
+                generated_preprocessed = generated_preprocessed.to(torch.float16)
+
+                generated_preprocessed = self.mtcnn(generated_preprocessed)
+            except Exception as e:
+                print('MTCNN failed, using bilinear interpolation')
+                print(e)
+                driving_preprocessed = prewhiten(x['driving'])
+                driving_preprocessed = torch.nn.functional.interpolate(driving_preprocessed, size=(160, 160), mode='bilinear', align_corners=True)
+                generated_preprocessed = prewhiten(generated['prediction'])
+                generated_preprocessed = torch.nn.functional.interpolate(generated_preprocessed, size=(160, 160), mode='bilinear', align_corners=True)
+            id_real = self.id_recognition_model(driving_preprocessed)
+            id_generated = self.id_recognition_model(generated_preprocessed)
+            #cosine
+            value = 1 - torch.nn.functional.cosine_similarity(id_real, id_generated, dim=1)
+            loss_values['id'] = self.loss_weights['id'] * value.mean()
+
 
         return loss_values, generated

@@ -38,6 +38,8 @@ if __name__ == "__main__":
     parser.add_argument("--mode", default="train", choices=["train", "reconstruction", "train_avd"])
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
+    parser.add_argument("--kp_detector", default=None, help="path to kp_detector checkpoint to restore")
+    parser.add_argument("--bg_predictor", default=None, help="path to bg_predictor checkpoint to restore")
     parser.add_argument("--detect_anomaly", action="store_true", help="detect anomaly in autograd")
 
 
@@ -94,8 +96,11 @@ if __name__ == "__main__":
 
     if opt.mode == 'train':
         print("Training...")
-        train(config, inpainting, kp_detector, bg_predictor, dense_motion_network, opt.checkpoint, log_dir, dataset,
-              optimizer_class=optimizer_class)
+        train(config, inpainting, kp_detector, bg_predictor, dense_motion_network, opt.checkpoint,
+              log_dir, dataset,
+              optimizer_class=optimizer_class,
+              kp_detector_checkpoint=opt.kp_detector,
+              bg_predictor_checkpoint=opt.bg_predictor)
     elif opt.mode == 'train_avd':
         print("Training Animation via Disentaglement...")
         train_avd(config, inpainting, kp_detector, bg_predictor, dense_motion_network, avd_network, opt.checkpoint,

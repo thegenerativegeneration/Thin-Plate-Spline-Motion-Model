@@ -34,20 +34,21 @@ model_params:
 
 
 train_params:
-  num_epochs: 5
+  num_epochs: 20
   num_repeats: 10
-  lr_generator: 2.0e-5
-  batch_size: 16
+  lr_generator: 2.0e-4
+  lr_discriminator: 2.0e-3
+  batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]
   dataloader_workers: 12
   checkpoint_freq: 10
-  dropout_epoch: 0
+  dropout_epoch: 3
   dropout_maxp: 0.3
   dropout_startp: 0.1
   dropout_inc_epoch: 10
   bg_start: 6
   freeze_kp_detector: False
-  freeze_bg_predictor: True
+  freeze_bg_predictor: False
   transform_params:
     sigma_affine: 0.05
     sigma_tps: 0.005
@@ -57,6 +58,8 @@ train_params:
     equivariance_value: 10
     warp_loss: 10
     bg: 10
+    l2: 0
+
   optimizer: 'adamw'
   optimizer_params:
     betas: [ 0.9, 0.999 ]
