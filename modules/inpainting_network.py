@@ -9,21 +9,31 @@ class InpaintingNetwork(nn.Module):
     """
     Inpaint the missing regions and reconstruct the Driving image.
     """
-    def __init__(self, num_channels, block_expansion, max_features, num_down_blocks, multi_mask = True, **kwargs):
+    def __init__(self, num_channels, block_expansion, max_features, num_down_blocks, multi_mask = True,
+                 concat_encode=True, use_skip_blocks=False,
+                 **kwargs):
         super(InpaintingNetwork, self).__init__()
 
         self.num_down_blocks = num_down_blocks
         self.multi_mask = multi_mask
         self.first = SameBlock2d(num_channels, block_expansion, kernel_size=(7, 7), padding=(3, 3))
+        self.concat_encode = concat_encode
 
         down_blocks = []
         up_blocks = []
-        resblock = []
+        resblock = []#
+        skip_blocks = []
         for i in range(num_down_blocks):
             in_features = min(max_features, block_expansion * (2 ** i))
             out_features = min(max_features, block_expansion * (2 ** (i + 1)))
             down_blocks.append(DownBlock2d(in_features, out_features, kernel_size=(3, 3), padding=(1, 1)))
-            decoder_in_feature = out_features * 2
+            if use_skip_blocks:
+                skip_blocks.append(nn.Conv2d(in_features, out_features, kernel_size=(1, 1)))
+            if concat_encode:
+                decoder_in_feature = out_features * 2
+            else:
+                decoder_in_feature = out_features
+
             if i==num_down_blocks-1:
                 decoder_in_feature = out_features
             up_blocks.append(UpBlock2d(decoder_in_feature, in_features, kernel_size=(3, 3), padding=(1, 1)))
@@ -32,6 +42,10 @@ class InpaintingNetwork(nn.Module):
         self.down_blocks = nn.ModuleList(down_blocks)
         self.up_blocks = nn.ModuleList(up_blocks[::-1])
         self.resblock = nn.ModuleList(resblock[::-1])
+        if skip_blocks:
+            self.skip_blocks = nn.ModuleList(skip_blocks[::-1])
+        else:
+            self.skip_blocks = None
 
         self.final = nn.Conv2d(block_expansion, num_channels, kernel_size=(7, 7), padding=(3, 3))
         self.num_channels = num_channels
@@ -58,6 +72,8 @@ class InpaintingNetwork(nn.Module):
         encoder_map = [out]
         for i in range(len(self.down_blocks)):
             out = self.down_blocks[i](out)
+            if self.skip_blocks:
+                out = self.skip_blocks[i](out)
             encoder_map.append(out)
 
         output_dict = {}
@@ -68,15 +84,10 @@ class InpaintingNetwork(nn.Module):
         output_dict['occlusion_map'] = occlusion_map
 
         deformation = dense_motion['deformation']
-        out_ij = self.deform_input(out.detach(), deformation)
         out = self.deform_input(out, deformation)
-
-        out_ij = self.occlude_input(out_ij, occlusion_map[0].detach())
         out = self.occlude_input(out, occlusion_map[0])
 
-        warped_encoder_maps = []
-        warped_encoder_maps.append(out_ij)
-
+        warped_encoder_maps = [out.detach()]
 
         for i in range(self.num_down_blocks):
 
@@ -85,20 +96,21 @@ class InpaintingNetwork(nn.Module):
             out = self.up_blocks[i](out) # e.g. 0, 1, 2, 3
             
             encode_i = encoder_map[-(i+2)] # e.g. -2, -3, -4, -5
-            encode_ij = self.deform_input(encode_i.detach(), deformation)
             encode_i = self.deform_input(encode_i, deformation)
             
             occlusion_ind = 0
             if self.multi_mask:
                 occlusion_ind = i+1
-            encode_ij = self.occlude_input(encode_ij, occlusion_map[occlusion_ind].detach())
             encode_i = self.occlude_input(encode_i, occlusion_map[occlusion_ind])
-            warped_encoder_maps.append(encode_ij)
+            warped_encoder_maps.append(encode_i.detach())
 
             if(i==self.num_down_blocks-1):
                 break
 
-            out = torch.cat([out, encode_i], 1)
+            if self.concat_encode:
+                out = torch.cat([out, encode_i], 1)
+            else:
+                out = out + encode_i
 
         deformed_source = self.deform_input(source_image, deformation)
         output_dict["deformed"] = deformed_source

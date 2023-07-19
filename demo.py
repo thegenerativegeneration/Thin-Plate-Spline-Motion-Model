@@ -185,7 +185,7 @@ if __name__ == "__main__":
     parser.add_argument("--mode", default='relative', choices=['standard', 'relative', 'avd'],
                         help="Animate mode: ['standard', 'relative', 'avd'], when use the relative mode to animate a face, use '--find_best_frame' can get better quality result")
 
-    parser.add_argument("--find_best_frame", dest="find_best_frame", action="store_true",
+    parser.add_argument("-fb", "--find_best_frame", dest="find_best_frame", action="store_true",
                         help="Generate from the frame that is the most alligned with source. (Only for faces, requires face_aligment lib)")
 
     parser.add_argument("--cpu", dest="cpu", action="store_true", help="cpu mode.")

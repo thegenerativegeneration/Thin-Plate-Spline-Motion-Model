@@ -83,6 +83,7 @@ class GeneratorFullModel(torch.nn.Module):
     """
 
     def __init__(self, kp_extractor, bg_predictor, dense_motion_network, inpainting_network, train_params,
+                 discriminator=None,
                  *kwargs):
         super(GeneratorFullModel, self).__init__()
         self.kp_extractor = kp_extractor
@@ -115,24 +116,28 @@ class GeneratorFullModel(torch.nn.Module):
         if self.loss_weights.get('id', 0) > 0:
             self.id_recognition_model = InceptionResnetV1(pretrained='vggface2').eval()
             self.id_recognition_model.requires_grad_(False)
-            self.mtcnn = MTCNN()
-            self.mtcnn.requires_grad_(False)
+            #self.mtcnn = MTCNN()
+            #self.mtcnn.requires_grad_(False)
             if torch.cuda.is_available():
                 self.id_recognition_model = self.id_recognition_model.cuda()
-                self.mtcnn = self.mtcnn.cuda()
+                #self.mtcnn = self.mtcnn.cuda()
 
         else:
             self.id_recognition_model = None
 
+        if self.loss_weights.get('gan', 0) > 0:
+            self.discriminator = discriminator
+            if torch.cuda.is_available():
+                self.discriminator = self.discriminator.cuda()
 
 
-    def forward(self, x, epoch):
+
+    def forward(self, x, epoch, step=None):
         kp_source = self.kp_extractor(x['source'])
         kp_driving = self.kp_extractor(x['driving'])
         bg_param = None
-        if self.bg_predictor:
-            if(epoch>=self.bg_start):
-                bg_param = self.bg_predictor(x['source'], x['driving'])
+        if self.bg_predictor and epoch>=self.bg_start:
+            bg_param = self.bg_predictor(x['source'], x['driving'])
           
         if(epoch>=self.dropout_epoch):
             dropout_flag = False
@@ -213,28 +218,43 @@ class GeneratorFullModel(torch.nn.Module):
 
         # id loss
         if self.id_recognition_model and self.loss_weights['id'] != 0:
-            try:
-                driving_preprocessed = x['driving'] * 255
-                driving_preprocessed = driving_preprocessed.permute(0, 2, 3, 1)
-                driving_preprocessed = driving_preprocessed.to(torch.float16)
-                driving_preprocessed = self.mtcnn(driving_preprocessed)
-                generated_preprocessed = generated['prediction'] * 255
-                generated_preprocessed = generated_preprocessed.permute(0, 2, 3, 1)
-                generated_preprocessed = generated_preprocessed.to(torch.float16)
+            #try:
+            #    driving_preprocessed = x['driving'] * 255
+            #    driving_preprocessed = driving_preprocessed.permute(0, 2, 3, 1)
+            #    driving_preprocessed = driving_preprocessed.to(torch.float16)
+            #    driving_preprocessed = self.mtcnn(driving_preprocessed)
+            #    generated_preprocessed = generated['prediction'] * 255
+            #    generated_preprocessed = generated_preprocessed.permute(0, 2, 3, 1)
+            #    generated_preprocessed = generated_preprocessed.to(torch.float16)
 
-                generated_preprocessed = self.mtcnn(generated_preprocessed)
-            except Exception as e:
-                print('MTCNN failed, using bilinear interpolation')
-                print(e)
-                driving_preprocessed = prewhiten(x['driving'])
-                driving_preprocessed = torch.nn.functional.interpolate(driving_preprocessed, size=(160, 160), mode='bilinear', align_corners=True)
-                generated_preprocessed = prewhiten(generated['prediction'])
-                generated_preprocessed = torch.nn.functional.interpolate(generated_preprocessed, size=(160, 160), mode='bilinear', align_corners=True)
+            #    generated_preprocessed = self.mtcnn(generated_preprocessed)
+            #except Exception as e:
+            #print('MTCNN failed, using bilinear interpolation')
+            #print(e)
+            driving_preprocessed = prewhiten(x['driving'])
+            driving_preprocessed = torch.nn.functional.interpolate(driving_preprocessed, size=(160, 160), mode='bilinear', align_corners=True)
+            generated_preprocessed = prewhiten(generated['prediction'])
+            generated_preprocessed = torch.nn.functional.interpolate(generated_preprocessed, size=(160, 160), mode='bilinear', align_corners=True)
             id_real = self.id_recognition_model(driving_preprocessed)
             id_generated = self.id_recognition_model(generated_preprocessed)
             #cosine
             value = 1 - torch.nn.functional.cosine_similarity(id_real, id_generated, dim=1)
             loss_values['id'] = self.loss_weights['id'] * value.mean()
+
+        # gan loss
+        #if self.loss_weights['discriminator_gan'] != 0:
+        #    if step % self.discriminator_steps == 0:
+        #        discriminator_maps_generated = self.discriminator(generated['prediction'], x['driving'])
+        #        discriminator_maps_real = self.discriminator(x['driving'], x['driving'])
+        #        discriminator_loss = 0
+        #        for scale in discriminator_maps_generated:
+        #            value_generated = discriminator_maps_generated[scale]
+        #            value_real = discriminator_maps_real[scale]
+        #            discriminator_loss += self.loss_weights['discriminator_gan'] * (
+        #                        self.gan_loss(value_real, False, True) + self.gan_loss(value_generated, True, False)) / len(
+        #                discriminator_maps_generated)
+        #        loss_values['discriminator'] = discriminator_loss
+
 
 
         return loss_values, generated

@@ -4,6 +4,8 @@ import os
 import imageio
 import logging
 
+import torch
+
 logger = logging.getLogger("TPSMM")
 
 IMAGE_FORMATS = ["png", "jpg", "jpeg", "bmp", "tif", "tiff"]
@@ -132,5 +134,54 @@ class VideoWriter:
         else:
             self.frame = None
             return None
+
+
+def load_params(model, path, map_location=None, name="model",
+                strict=True, find_alternative_weights=False):
+    if path is None:
+        return
+
+    if os.path.isdir(path):
+        path = os.path.join(path, "model.pt")
+
+    if not os.path.exists(path):
+        logger.warning(f"Could not find checkpoint at {path}")
+        return
+
+    logger.info(f"Loading checkpoint from {path}")
+
+    checkpoint = torch.load(path, map_location=map_location)
+    try:
+        model.load_state_dict(checkpoint[name], strict=strict)
+    except Exception as e:
+        logger.error(f"Could not load model from {path}: {e}")
+
+        if strict:
+            raise e
+
+
+        without_match = set()
+        for k, v in model.items():
+            if k in model.state_dict():
+                if v.shape == model.state_dict()[k].shape:
+                    model.state_dict()[k].copy_(v)
+                else:
+                    without_match.add(k)
+                    logger.warning(f'Could not find direct match for {k} in checkpoint')
+            else:
+                without_match.add(k)
+                logger.warning(f'Could not find direct match for {k} in checkpoint')
+
+        if find_alternative_weights:
+            for k in without_match:
+                logger.info(f"Trying to find alternative weights for {k}")
+                for ckpt_k, ckpt_v in checkpoint[name].items():
+                    if ckpt_v.shape == model.state_dict()[k].shape:
+                        logger.info(f"Found alternative weights for {k} in {ckpt_k}")
+                        model.state_dict()[k].copy_(ckpt_v)
+                        break
+                else:
+                    logger.warning(f"Could not find alternative weights for {k}")
+
 
 

@@ -1,4 +1,6 @@
 import os
+
+from albumentations import AdvancedBlur
 from skimage import io, img_as_float32
 from skimage.color import gray2rgb
 from sklearn.model_selection import train_test_split
@@ -99,6 +101,7 @@ class FramesDataset(Dataset):
         else:
             self.transform = None
 
+
     def __len__(self):
         return len(self.videos)
 
@@ -118,7 +121,7 @@ class FramesDataset(Dataset):
                 frames = os.listdir(path)
                 num_frames = len(frames)
                 # use more frames that are different from each other to speed up training
-                min_frames_apart = num_frames // 4
+                min_frames_apart = num_frames // 3
                 first_frame_idx = np.random.choice(num_frames - min_frames_apart)
                 second_frame_idx = np.random.choice(range(first_frame_idx + min_frames_apart, num_frames))
                 frame_idx = np.array([first_frame_idx, second_frame_idx])
@@ -150,7 +153,9 @@ class FramesDataset(Dataset):
 
             out = {}
             if self.is_train:
-                source = np.array(video_array[0], dtype='float32')
+                source = video_array[0]
+                source = np.array(source, dtype='float32')
+
                 driving = np.array(video_array[1], dtype='float32')
 
                 out['driving'] = driving.transpose((2, 0, 1))
