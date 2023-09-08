@@ -136,6 +136,16 @@ class VideoWriter:
             return None
 
 
+def get_layer_type_from_key(key):
+    if "conv" in key:
+        return "conv"
+    elif "norm" in key:
+        return "norm"
+    elif "occlusion" in key:
+        return "occlusion"
+    else:
+        return None
+
 def load_params(model, path, map_location=None, name="model",
                 strict=True, find_alternative_weights=False):
     if path is None:
@@ -161,27 +171,38 @@ def load_params(model, path, map_location=None, name="model",
 
 
         without_match = set()
-        for k, v in model.items():
-            if k in model.state_dict():
-                if v.shape == model.state_dict()[k].shape:
-                    model.state_dict()[k].copy_(v)
+        for k, v in model.state_dict().items():
+            if k in checkpoint[name]:
+                if v.shape == checkpoint[name][k].shape:
+                    logger.info(f"Found direct match for {k}")
+                    model.state_dict()[k].copy_(checkpoint[name][k])
                 else:
                     without_match.add(k)
                     logger.warning(f'Could not find direct match for {k} in checkpoint')
             else:
                 without_match.add(k)
-                logger.warning(f'Could not find direct match for {k} in checkpoint')
+                logger.warning(f'Could not find {k} in checkpoint')
+
 
         if find_alternative_weights:
-            for k in without_match:
-                logger.info(f"Trying to find alternative weights for {k}")
+            temp_without_match = set(without_match)
+
+            logger.info(f"Trying to find alternative weights for {len(without_match)} keys")
+            for k in temp_without_match:
+                weights_type = k.split(".")[-1]
+                layer_type = get_layer_type_from_key(k)
+
                 for ckpt_k, ckpt_v in checkpoint[name].items():
+                    if layer_type is None or layer_type not in ckpt_k or weights_type not in ckpt_k:
+                        continue
+
                     if ckpt_v.shape == model.state_dict()[k].shape:
-                        logger.info(f"Found alternative weights for {k} in {ckpt_k}")
+                        logger.warning(f"Found alternative weights for {k} in {ckpt_k}")
                         model.state_dict()[k].copy_(ckpt_v)
+                        without_match.remove(k)
                         break
-                else:
-                    logger.warning(f"Could not find alternative weights for {k}")
+
+        logger.warning(f"Could not load {len(without_match)} keys from checkpoint")
 
 
 

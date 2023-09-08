@@ -24,7 +24,7 @@ model_params:
     max_features: 512
     num_down_blocks: 4
     concat_encode: False
-    use_skip_blocks: True
+    use_skip_blocks: False
   dense_motion_params:
     block_expansion: 64
     max_features: 1024

@@ -1,4 +1,5 @@
 # Use this file to finetune from a pretrained 256x256 model
+name: vox-768-finetune
 dataset_params:
   root_dir: ./video-preprocessing/vox2-768
   frame_shape: 768,768,3
@@ -36,14 +37,15 @@ model_params:
 
 train_params:
   visualize_model: False
-  num_epochs: 80
-  num_repeats: 10
+  num_epochs: 50
+  num_repeats: 1
   # Higher LR seems to bring problems when finetuning
-  lr_generator: 3.0e-5
-  batch_size: 2
+  lr_generator: 2.0e-6
+  lr_discriminator: 2.0e-5
+  batch_size: 1
   scales: [1, 0.5, 0.25, 0.125, 0.0625]
   dataloader_workers: 8
-  checkpoint_freq: 2
+  checkpoint_freq: 1
   dropout_epoch: 0
   dropout_maxp: 0.3
   dropout_startp: 0.1
@@ -60,10 +62,19 @@ train_params:
     equivariance_value: 10
     warp_loss: 10
     bg: 10
+    id: 0.1
+    l2: 0
+    huber: 0
+    generator_gan: 10
+    generator_feat_match: 10
+    discriminator_gan: 10
   optimizer: 'adamw'
   optimizer_params:
     betas: [ 0.9, 0.999 ]
     weight_decay: 0.1
+  scheduler: 'onecycle'
+  scheduler_params:
+    pct_start: 0.01
 
 train_avd_params:
   num_epochs: 200

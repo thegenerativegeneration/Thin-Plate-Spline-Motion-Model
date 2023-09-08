@@ -3,7 +3,7 @@ from tqdm import trange
 import torch
 from torch.utils.data import DataLoader
 
-from gan import MultiScaleDiscriminator, discriminator_adversarial_loss, generator_adversarial_loss, \
+from modules.gan import MultiScaleDiscriminator, discriminator_adversarial_loss, generator_adversarial_loss, \
     weak_feature_matching_loss
 from logger import Logger
 from modules.model import GeneratorFullModel
@@ -28,7 +28,7 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
           kp_detector_checkpoint=None,
           bg_predictor_checkpoint=None,
           dense_motion_network_checkpoint=None,
-            inpainting_checkpoint=None,
+          inpainting_checkpoint=None,
           ):
     train_params = config['train_params']
     scheduler_params = config['train_params'].get('scheduler_params', {})
@@ -45,14 +45,13 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
         discriminator = MultiScaleDiscriminator(scales=[1], d=64)
         optimizer_discriminator = optimizer_class(
             [{'params': list(discriminator.parameters()), 'initial_lr': train_params['lr_discriminator']}],
-                lr=train_params['lr_discriminator'], **optimizer_params)
+            lr=train_params['lr_discriminator'], **optimizer_params)
     else:
         discriminator = None
         optimizer_discriminator = None
 
-
-
-    torchinfo.summary(discriminator, input_size=(1, 3, 256, 256))
+    if discriminator is not None:
+        torchinfo.summary(discriminator, input_size=(1, 3, 256, 256))
 
     optimizer_bg_predictor = None
     if bg_predictor:
@@ -121,13 +120,15 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
                                      )
     if discriminator:
         discriminator_scheduler = OneCycleLR(optimizer_discriminator, max_lr=train_params['lr_discriminator'],
-                                                total_steps=(len(dataset) // train_params['batch_size']) * train_params[
-                                                    'num_epochs'],
-                                                last_epoch=last_epoch,
-                                                **scheduler_params
-                                                )
+                                             total_steps=(len(dataset) // train_params['batch_size']) * train_params[
+                                                 'num_epochs'],
+                                             last_epoch=last_epoch,
+                                             **scheduler_params
+                                             )
 
-        discriminator, optimizer_discriminator, discriminator_scheduler = accelerator.prepare(discriminator, optimizer_discriminator, discriminator_scheduler)
+        discriminator, optimizer_discriminator, discriminator_scheduler = accelerator.prepare(discriminator,
+                                                                                              optimizer_discriminator,
+                                                                                              discriminator_scheduler)
 
     scheduler_bg_predictor = None
     if bg_predictor:
@@ -143,7 +144,6 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
                                         train_params)
 
     bg_start = train_params['bg_start']
-
 
     inpainting_network, kp_detector, dense_motion_network, optimizer, scheduler_optimizer, dataloader, generator_full = accelerator.prepare(
         inpainting_network, kp_detector, dense_motion_network, optimizer, scheduler_optimizer, dataloader,
@@ -205,11 +205,11 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
                                                                               start_layer=0)
 
                         losses_generator['gen'] = gen_loss * train_params['loss_weights']['generator_gan']
-                        losses_generator['feat_match'] = feat_match_loss * train_params['loss_weights']['generator_feat_match']
+                        losses_generator['feat_match'] = feat_match_loss * train_params['loss_weights'][
+                            'generator_feat_match']
 
                     loss_values = [val.mean() for val in losses_generator.values()]
                     loss = sum(loss_values)
-
 
                     # discriminator step
                     if i % 2 == 0 and discriminator:
@@ -227,7 +227,6 @@ def train(config, inpainting_network, kp_detector, bg_predictor, dense_motion_ne
                         clip_grad_norm_(bg_predictor.parameters(), max_norm=10, norm_type=math.inf)
 
                     optimizer.step()
-
 
                     if bg_predictor and epoch >= bg_start and not freeze_bg_predictor:
                         optimizer_bg_predictor.step()
