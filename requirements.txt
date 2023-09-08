@@ -27,3 +27,4 @@ wandb==0.15.10
 accelerate==0.22.0
 torchinfo==1.8.0
 facenet_pytorch==2.5.3
+torchview==0.2.6
