@@ -1,6 +1,5 @@
 import os
 
-from albumentations import AdvancedBlur
 from skimage import io, img_as_float32
 from skimage.color import gray2rgb
 from sklearn.model_selection import train_test_split
