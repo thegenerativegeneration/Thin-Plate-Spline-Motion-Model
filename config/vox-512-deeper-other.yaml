@@ -67,7 +67,7 @@ train_params:
     warp_loss: 10
     bg: 0
     l2: 0
-    id: 0.1
+    id: 1
     huber: 0
     generator_gan: 1
     generator_feat_match: 0
