@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 
 import yaml
 
-from gan import MultiScaleDiscriminator
+from modules.gan import MultiScaleDiscriminator
 from modules.inpainting_network import InpaintingNetwork
 from modules.keypoint_detector import KPDetector
 from modules.bg_motion_predictor import BGMotionPredictor
