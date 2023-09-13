@@ -22,7 +22,7 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     with open(opt.config) as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
     checkpoint = torch.load(opt.checkpoint)
     print(checkpoint.keys())
