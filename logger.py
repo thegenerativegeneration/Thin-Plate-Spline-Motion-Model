@@ -56,7 +56,7 @@ class Logger:
 
 
     def save_cpk(self, emergent=False):
-        cpk = {k: v.state_dict() for k, v in self.models.items()}
+        cpk = {k: v.state_dict() for k, v in self.models.items() if v is not None}
         cpk['epoch'] = self.epoch
         cpk_path = os.path.join(self.cpk_dir, '%s-checkpoint.pth.tar' % str(self.epoch).zfill(self.zfill_num))
         if not (os.path.exists(cpk_path) and emergent):
