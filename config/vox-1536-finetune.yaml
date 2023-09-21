@@ -1,0 +1,93 @@
+# Use this file to finetune from a pretrained 256x256 model
+name: vox-1536-finetune
+dataset_params:
+  root_dir: ./video-preprocessing/vox2-768
+  frame_shape: 1536,1536,3
+  id_sampling: True
+  augmentation_params:
+    flip_param:
+      horizontal_flip: True
+      time_flip: True
+    jitter_param:
+      brightness: 0.1
+      contrast: 0.1
+      saturation: 0.1
+      hue: 0.1
+
+
+model_params:
+  common_params:
+    num_tps: 10
+    num_channels: 3
+    bg: True
+    multi_mask: True
+  generator_params:
+    block_expansion: 64
+    max_features: 512
+    num_down_blocks: 3
+  dense_motion_params:
+    block_expansion: 64
+    max_features: 1024
+    num_blocks: 5
+    scale_factor: 0.25
+  avd_network_params:
+    id_bottle_size: 128
+    pose_bottle_size: 128
+
+
+train_params:
+  visualize_model: False
+  num_epochs: 50
+  num_repeats: 1
+  # Higher LR seems to bring problems when finetuning
+  lr_generator: 2.0e-6
+  lr_discriminator: 2.0e-5
+  batch_size: 1
+  scales: [1, 0.5, 0.25, 0.125, 0.0625]
+  dataloader_workers: 8
+  checkpoint_freq: 1
+  dropout_epoch: 0
+  dropout_maxp: 0.3
+  dropout_startp: 0.1
+  dropout_inc_epoch: 0
+  bg_start: 81
+  freeze_kp_detector: True
+  freeze_bg_predictor: True
+  transform_params:
+    sigma_affine: 0.05
+    sigma_tps: 0.005
+    points_tps: 5
+  loss_weights:
+    perceptual: [10, 10, 10, 10, 10]
+    equivariance_value: 10
+    warp_loss: 10
+    bg: 10
+    id: 0.1
+    l2: 0
+    huber: 0
+    generator_gan: 0
+    generator_feat_match: 0
+    discriminator_gan: 0
+  optimizer: 'adamw'
+  optimizer_params:
+    betas: [ 0.9, 0.999 ]
+    weight_decay: 0.1
+  scheduler: 'onecycle'
+  scheduler_params:
+    pct_start: 0.01
+
+train_avd_params:
+  num_epochs: 200
+  num_repeats: 1
+  batch_size: 1
+  dataloader_workers: 6
+  checkpoint_freq: 1
+  epoch_milestones: [140, 180]
+  lr: 1.0e-3
+  lambda_shift: 1
+  random_scale: 0.25
+
+visualizer_params:
+  kp_size: 5
+  draw_border: True
+  colormap: 'gist_rainbow'
