@@ -15,14 +15,16 @@ import wandb
 
 class Logger:
     def __init__(self, log_dir, checkpoint_freq=50, visualizer_params=None,
-                 zfill_num=8, log_file_name='log.txt', models=()):
+                 zfill_num=8, log_file_name='log.txt', models=(),
+                 train_config=None):
 
-        self.models = None
+        self.models = models
         self.loss_list = []
         self.cpk_dir = log_dir
         self.visualizations_dir = os.path.join(log_dir, 'train-vis')
         if not os.path.exists(self.visualizations_dir):
             os.makedirs(self.visualizations_dir)
+        print("Visualizations will be saved in %s" % self.visualizations_dir)
         self.log_file = open(os.path.join(log_dir, log_file_name), 'a')
         self.zfill_num = zfill_num
         self.visualizer = Visualizer(**visualizer_params)
@@ -30,9 +32,11 @@ class Logger:
         self.epoch = 0
         self.best_loss = float('inf')
         self.names = None
-        wandb.init(project="TPSMM", dir=log_dir)
+        wandb.init(project="TPSMM", dir=log_dir, config=train_config,
+                   name=train_config['name'])
         for model in models:
-            wandb.watch(model)
+            if model is not None:
+                wandb.watch(model, log="all", log_freq=500)
 
     def log_scores(self, loss_names):
         loss_mean = np.array(self.loss_list).mean(axis=0)
@@ -46,12 +50,13 @@ class Logger:
 
     def visualize_rec(self, inp, out):
         image = self.visualizer.visualize(inp['driving'], inp['source'], out)
+        wandb.log({"image": [wandb.Image(image)]})
         imageio.imsave(os.path.join(self.visualizations_dir, "%s-rec.png" % str(self.epoch).zfill(self.zfill_num)),
                        image)
-        wandb.log({"image": [wandb.Image(image)]})
+
 
     def save_cpk(self, emergent=False):
-        cpk = {k: v.state_dict() for k, v in self.models.items()}
+        cpk = {k: v.state_dict() for k, v in self.models.items() if v is not None}
         cpk['epoch'] = self.epoch
         cpk_path = os.path.join(self.cpk_dir, '%s-checkpoint.pth.tar' % str(self.epoch).zfill(self.zfill_num))
         if not (os.path.exists(cpk_path) and emergent):
@@ -60,7 +65,7 @@ class Logger:
     @staticmethod
     def load_cpk(checkpoint_path, inpainting_network=None, dense_motion_network=None, kp_detector=None,
                  bg_predictor=None, avd_network=None, optimizer=None, optimizer_bg_predictor=None,
-                 optimizer_avd=None):
+                 optimizer_avd=None, discriminator=None, optimizer_discriminator=None):
         checkpoint = torch.load(checkpoint_path)
         if inpainting_network is not None:
             inpainting_network.load_state_dict(checkpoint['inpainting_network'])
@@ -80,6 +85,11 @@ class Logger:
         if optimizer_avd is not None:
             if 'optimizer_avd' in checkpoint:
                 optimizer_avd.load_state_dict(checkpoint['optimizer_avd'])
+        if discriminator is not None and 'discriminator' in checkpoint:
+            discriminator.load_state_dict(checkpoint['discriminator'])
+        if optimizer_discriminator is not None and 'optimizer_discriminator' in checkpoint:
+            optimizer_discriminator.load_state_dict(checkpoint['optimizer_discriminator'])
+
         epoch = -1
         if 'epoch' in checkpoint:
             epoch = checkpoint['epoch']

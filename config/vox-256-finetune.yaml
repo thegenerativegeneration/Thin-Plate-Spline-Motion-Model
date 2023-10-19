@@ -1,6 +1,6 @@
 dataset_params:
-  root_dir: vox_256
-  frame_shape: null
+  root_dir: ./video-preprocessing/vox2-768
+  frame_shape: 256,256,3
   id_sampling: True
   augmentation_params:
     flip_param:
@@ -34,19 +34,21 @@ model_params:
 
 
 train_params:
-  num_epochs: 100
-  num_repeats: 75
-  epoch_milestones: [70, 90]
+  num_epochs: 20
+  num_repeats: 10
   lr_generator: 2.0e-4
-  batch_size: 28
+  lr_discriminator: 2.0e-3
+  batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]
   dataloader_workers: 12
-  checkpoint_freq: 50
-  dropout_epoch: 35
+  checkpoint_freq: 10
+  dropout_epoch: 3
   dropout_maxp: 0.3
   dropout_startp: 0.1
   dropout_inc_epoch: 10
-  bg_start: 10
+  bg_start: 6
+  freeze_kp_detector: False
+  freeze_bg_predictor: False
   transform_params:
     sigma_affine: 0.05
     sigma_tps: 0.005
@@ -56,10 +58,13 @@ train_params:
     equivariance_value: 10
     warp_loss: 10
     bg: 10
-  optimizer: 'adam'
+    l2: 0
+
+  optimizer: 'adamw'
   optimizer_params:
-    betas: [ 0.5, 0.999 ]
-    weight_decay: 1e-4
+    betas: [ 0.9, 0.999 ]
+    weight_decay: 0.1
+
 
 train_avd_params:
   num_epochs: 100

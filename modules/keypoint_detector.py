@@ -15,9 +15,13 @@ class KPDetector(nn.Module):
         self.fg_encoder = models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
         num_features = self.fg_encoder.fc.in_features
         self.fg_encoder.fc = nn.Linear(num_features, num_tps*5*2)
+        self.preprocess = torchvision.transforms.Compose([
+            torchvision.transforms.Resize((256, 256), antialias=True),
+        ])
 
         
     def forward(self, image):
+        image = self.preprocess(image)
 
         fg_kp = self.fg_encoder(image)
         bs, _, = fg_kp.shape
